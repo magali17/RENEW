@@ -1,0 +1,36 @@
+---
+title: "Peer Navigators"
+author: "Magali Blanco"
+date: "11/17/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, cache=T, cache.comments = F, message = F, warning = F, tidy.opts=list(width.cutoff=60), tidy=TRUE, fig.height = 8)  
+
+# Clear workspace of all objects and unload all extra (non-base) packages
+rm(list = ls(all = TRUE))
+if (!is.null(sessionInfo()$otherPkgs)) {
+  res <- suppressWarnings(
+    lapply(paste('package:', names(sessionInfo()$otherPkgs), sep=""),
+      detach, character.only=TRUE, unload=TRUE, force=TRUE))
+}
+
+pacman::p_load(readxl)
+
+pn_initial <- read_excel("Data/peer navigator initial questionnaires.xlsx")
+pn_training <- read_excel("Data/training quizzes.xlsx")
+
+
+```
+
+```{r}
+#format column types 
+
+
+# pn_initial: T1 - mean, SD...
+
+
+
+```
+
