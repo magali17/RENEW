@@ -1,0 +1,265 @@
+---
+title: "RENEW Data Report"
+author: "Magali Blanco"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+editor_options: 
+  chunk_output_type: console
+---
+
+
+**To do:**   
+
+* quizzes   
+    + analyze pn_training w/ and w/o sup   
+
+\newpage
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, cache=T, cache.comments = F, message = F, warning = F, tidy.opts=list(width.cutoff=60), tidy=TRUE, fig.height = 8)  
+
+# Clear workspace of all objects and unload all extra (non-base) packages
+rm(list = ls(all = TRUE))
+if (!is.null(sessionInfo()$otherPkgs)) {
+  res <- suppressWarnings(
+    lapply(paste('package:', names(sessionInfo()$otherPkgs), sep=""),
+      detach, character.only=TRUE, unload=TRUE, force=TRUE))
+}
+
+pacman::p_load(readxl, table1, tidyverse, knitr, kableExtra)
+
+source("Var&Fns.R")
+
+######################################### Load data #########################################
+
+pn_dem <- read_excel("Data/peer navigator initial questionnaires.xlsx")
+pn_train_eval <- read_excel("Data/peer navigator training evaluations.xlsx")
+pn_quiz <- read_excel("Data/peer navigator training quizzes.xlsx")
+
+#attach(pn_quiz)
+pn_quiz <- pn_quiz %>%
+  mutate(
+    #recode supervisor
+    id = recode(id, Supervisor = "999")) %>%
+  #convert character columns to numbers 
+  mutate_if(is.character, as.numeric) %>%
+  #drop individuals who only completed 1 survey
+  filter(!id %in% c(2, 3))
+
+```
+
+
+# Peer Navigators 
+
+```{r}
+### --> ?? no "English as primary langugae" Q. get from benefits group?
+
+```
+
+## Demographics   
+From initial Questionnaires 
+
+```{r}
+######################################### Demographics #########################################
+#Table 1 for peer navigators
+pn_dem %>%
+  t1.fn(column.name = "Peer Navigators") %>%
+  filter(substr(x = get("Peer Navigators"), 1,1) != "0") %>%
+  kable(caption = "Participant Demographics & Work Characteristics", 
+        #format = "latex"
+        ) %>%
+  pack_rows("Race", 4, 7,  bold = F, label_row_css = F) %>%
+  pack_rows("Education", 9, 11, label_row_css = F,  bold = F) %>%
+  #work around since bold=F doesn't work in pack_rows()  
+  gsub(pattern = "(<strong>)|<strong/>", replacement = "")
+ 
+```
+
+## Chronic Pain (n, %)
+
+```{r}
+######################################### Chronic Pain #########################################
+
+pn_pain_known = sum(!is.na(pn_dem$chronic_pain))
+pn_pain_yes_n = sum(pn_dem$chronic_pain == 1, na.rm = T)
+pn_pain_yes_pct = paste0(mean(pn_dem$chronic_pain, na.rm = T)*100)
+
+pn_pain_n_pct <- paste0(pn_pain_yes_n, " (", pn_pain_yes_pct, "%)") 
+
+pn_pain_n_pct %>%
+  kable(col.names = "Peer Navigators", 
+        caption = "History of chronic musculoskeletal pain")
+
+```
+
+# Training evaluations
+
+Excludes:   
+
+* open ended responses    
+
+```{r}
+######################################### Training Evaluations #########################################
+# w/o supervisor
+pn_train_eval %>%
+  #drop supervisor & 2 PNs that didn't complete survey 
+  filter(id != "supervisor") %>%
+  training.eval.fn() %>%
+  kable(caption = "Peer Navigators Training and Program Feedback. Number (%) of individuals who 'Agree' or 'Strongly Agree'. Excludes supervisor.",  
+        col.names = c("Measure", "1", "2"),  
+        ) %>%
+  add_header_above(c(" " = 1, "Training" = 2))  
+ #cat(., file = "df.html") 
+   
+# w/ supervisor
+pn_train_eval %>%
+  #drop supervisor & 2 PNs that didn't complete survey 
+  training.eval.fn() %>%
+  kable(caption = "Peer Navigators Training and Program Feedback. Number (%) of individuals who 'Agree' or 'Strongly Agree'. Includes supervisor.",  
+        col.names = c("Measure", "1", "2"),  
+        ) %>%
+  add_header_above(c(" " = 1, "Training" = 2))  
+  
+```
+
+## Quizzes
+
+```{r}
+######################################### Quizzes #########################################
+
+max_score <- 16
+
+pn_quiz <- pn_quiz %>%
+  #drop supervisor
+  filter(id != 999) %>%
+  #label correct answers based on whether individuals received full credit
+  mutate(
+    wc_benefits_cor = as.numeric(wc_benefits == 5),
+    wc_medical_coverage_cor = as.numeric(wc_medical_coverage == 1),
+    on_job_injuries_cor = as.numeric(on_job_injuries == 4),
+    smoking_cor = as.numeric(smoking == 1),
+    wc_provider_cor = as.numeric(wc_provider==1),
+    second_opinion_cor = as.numeric(second_opinion == 4)) 
+
+quiz_scores <- pn_quiz %>%
+  select(id, training, total_score:second_opinion_cor) %>%
+  group_by(training) %>%
+  summarize(
+    tot_score = round(mean(total_score/max_score)*100),
+    wc_benefits = round(mean(wc_benefits_cor)*100),
+    wc_medical_coverage = round(mean(wc_medical_coverage_cor)*100),
+    on_job_injuries = round(mean(on_job_injuries_cor)*100),
+    smoking = round(mean(smoking_cor)*100),
+    wc_provider = round(mean(wc_provider_cor)*100),
+    second_opinion = round(mean(second_opinion_cor)*100)) 
+
+quiz_scores <- t(quiz_scores) %>%
+  #paste0(., "%")
+    as.data.frame() %>%
+    rownames_to_column()
+
+names(quiz_scores) <- c("Allias", "Pre", "Post1", "Post2")
+
+quiz_scores <- quiz_scores %>%
+  slice(-1) %>%
+  mutate(
+    Question = c("Mean total quiz score",
+              "What kind of benefits does WC cover? (multiple choice)",
+              "A caregiver will only get medical coverage through WC if their injury requires them to take time off of work",
+              "Which are on-the-job injuries? (multiple choice)",
+              "Stopping smoking can help caregivers recover after they are injured on the job",
+              "The attending provider is the only provider covd under the WC claim",
+              "Reasons for wanting to get a second opinion (multiple choice)"
+              ),
+    Pre = paste0(Pre, "%"),
+    Post1 = paste0(Post1, "%"),
+    Post2 = paste0(Post2, "%"),
+    )
+
+quiz_scores %>%
+  select(Allias, Question, Pre:Post2) %>%
+  kable(caption = paste0("Quiz scores before (Pre) and after (Post 1, Post 2) each training module. Percent of individuals who answered correctly. N = ", length(unique(pn_quiz$id)), ".")) %>%
+  add_header_above(c(" " = 2, "Training" = 3))
+
+```
+
+```{r, eval=T}
+
+quiz_scores.l <- quiz_scores %>%
+  gather("Training", "Correct", Pre:Post2) %>%
+  mutate(
+    Training = factor(Training, levels = c("Pre", "Post1", "Post2")),
+    Correct = as.numeric(substr(Correct, 1,  nchar(Correct)-1))/100,
+    Allias = relevel(as.factor(Allias), ref = "tot_score")
+         ) 
+
+quiz_scores.l %>%
+  ggplot(aes(x=Allias, y=Correct, fill=Training)) + 
+  geom_bar(position = "dodge", stat = "identity") + 
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) + 
+  scale_y_continuous(labels = scales::percent) #+ 
+  #labs(title = "Quiz scores before (Pre) and after (Post 1, Post 2) each training module.\nPercent of individuals who answered correctly.")
+
+```
+
+T-test comparing Pre-training vs Training 2 total quiz scores
+
+```{r}
+
+#reorganize total training scores
+quiz_tot_scores <- pn_quiz %>%
+  select(id, training, total_score) %>%
+  spread(training, total_score, sep = "_")
+
+(quiz_t_test <- t.test(x=quiz_tot_scores$training_0, 
+       y= quiz_tot_scores$training_2))
+
+
+quiz_t_p <- ifelse(round(quiz_t_test$p.value, 3) > 0.001, 
+       round(quiz_t_test$p.value, 3), 
+       "< 0.001")
+
+#paste0("t-test p-val comparing pre-training to training 2 total quiz scores: ", quiz_t_p)
+
+```
+
+Wilcoxon Signed-Rank test. A non-parametric (paired) test or whether two distributions are identical without assuming them to be normally distributed. 
+
+```{r}
+(quiz_wilcox_test <- wilcox.test(x=quiz_tot_scores$training_0, 
+       y= quiz_tot_scores$training_2, 
+       paired = TRUE, 
+       alternative = "two.sided")
+)
+
+quiz_wilcox_p <- ifelse(round(quiz_wilcox_test$p.value, 3) > 0.001, 
+       round(quiz_wilcox_test$p.value, 3), 
+       "< 0.001")
+
+
+```
+
+
+
+\newpage
+```{r}
+# HCAs
+```
+
+
+
+
+\newpage
+# Code
+
+```{r,ref.label=knitr::all_labels(),echo=TRUE,eval=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=60), include=T}
+```
+
